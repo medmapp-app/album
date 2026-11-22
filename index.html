@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ألبوم الصور</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;
+  --bg:light-dark(#f7f2ea,#17140f);      /* لون الخلفية */
+  --card:light-dark(#ffffff,#221e18);    /* لون البطاقات */
+  --ink:light-dark(#1d1a16,#f3ece0);     /* لون النص */
+  --mute:light-dark(#6d655a,#a99f90);    /* لون النص الثانوي */
+  --line:light-dark(#e4dbcd,#3a332a);    /* لون الحدود */
+  --acc:light-dark(#d9482b,#ff7a5c)}     /* اللون المميز للأزرار */
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 "Readex Pro",Tahoma,sans-serif;overflow-x:clip} /* الخط والخلفية العامة */
+.wrap{max-width:900px;margin:0 auto;padding:clamp(18px,4vw,44px) max(4vw,14px) 60px} /* عرض المحتوى والهوامش */
+h1{font-size:clamp(28px,6vw,44px);line-height:1.1;margin:0 0 6px;text-wrap:balance} /* حجم العنوان الرئيسي */
+h2{font-size:21px;margin:0 0 12px}                 /* حجم العناوين الفرعية */
+p{margin:0 0 12px}
+.sub{color:var(--mute);margin-bottom:22px}         /* نص وصفي باهت */
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:clamp(16px,3vw,26px);margin-bottom:20px;box-shadow:0 10px 30px -18px rgb(0 0 0/.35)} /* شكل البطاقة */
+label.f{display:block;font-weight:600;margin:10px 0 6px} /* عناوين الحقول */
+input[type=text],input[type=email],input[type=password]{width:100%;font:inherit;font-size:16px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)} /* حقول الإدخال */
+input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-offset:2px} /* إطار التركيز */
+.drop{position:relative;display:grid;place-items:center;text-align:center;gap:4px;margin:16px 0;padding:26px 14px;border:2px dashed var(--line);border-radius:16px;cursor:pointer} /* منطقة اختيار الصور */
+.drop.on{border-color:var(--acc)}                  /* عند سحب الصور فوقها */
+.drop small{color:var(--mute)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px} /* شبكة المصغرات */
+.th{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--line)} /* مربع المصغرة */
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.th button{position:absolute;top:6px;inset-inline-start:6px;width:32px;height:32px;border-radius:50%;border:0;background:rgb(0 0 0/.6);color:#fff;font-size:18px;cursor:pointer} /* زر حذف المصغرة */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:14px;border:0;font:inherit;font-weight:700;cursor:pointer;background:var(--acc);color:#fff;text-decoration:none} /* الزر الأساسي */
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)} /* الزر الثانوي */
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px} /* صف أزرار */
+.msg{color:var(--mute);font-size:15px;margin-top:10px}
+.err{color:var(--acc)}                             /* رسائل الخطأ */
+.qrbox{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:22px;align-items:center} /* تخطيط بطاقة الرمز */
+.qrbox canvas{width:100%;height:auto;background:#fff;border-radius:14px;image-rendering:pixelated} /* صورة الرمز */
+.link{font-size:13px;color:var(--mute);overflow-wrap:anywhere;direction:ltr;text-align:start} /* الرابط */
+.al{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)} /* سطر ألبوم في القائمة */
+.al:first-child{border-top:0}
+.al img{width:54px;height:54px;border-radius:10px;object-fit:cover;flex:none;background:var(--line)}
+.al .t{flex:1}.al .t small{display:block;color:var(--mute)}
+.al button{min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px} /* معرض الصور للزائر */
+.gal button{padding:0;border:0;aspect-ratio:1;border-radius:12px;overflow:hidden;cursor:zoom-in;background:var(--line)}
+.gal img{width:100%;height:100%;object-fit:cover;display:block}
+.lb{position:fixed;inset:0;background:rgb(0 0 0/.94);display:none;place-items:center;z-index:10} /* العارض بملء الشاشة */
+.lb.open{display:grid}
+.lb img{max-width:96vw;max-height:84vh;border-radius:6px}
+.lb .nav{position:fixed;bottom:18px;inset-inline:0;display:flex;justify-content:center;align-items:center;gap:14px;color:#fff}
+.lb button{min-width:52px;min-height:52px;border-radius:50%;border:0;background:rgb(255 255 255/.16);color:#fff;font-size:24px;cursor:pointer}
+.lb .x{position:fixed;top:14px;inset-inline-end:14px}
+.hidden{display:none!important}
+.spin{width:20px;height:20px;border:3px solid rgb(255 255 255/.4);border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite} /* مؤشر التحميل */
+@keyframes s{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+@media(max-width:600px){.qrbox{grid-template-columns:1fr}.qrbox canvas{max-width:270px;margin:0 auto}.gal{grid-template-columns:repeat(2,minmax(0,1fr))}} /* تخطيط الجوال */
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="loading" class="msg">جارِ التحميل…</div>
+
+  <!-- ========== عرض الألبوم للزائر (بدون تسجيل) ========== -->
+  <section id="viewer" class="hidden">
+    <h1 id="vtitle"></h1>
+    <p id="vsub" class="sub"></p>
+    <div id="gal" class="gal"></div>
+  </section>
+
+  <!-- ========== تسجيل دخول صاحب الصفحة ========== -->
+  <section id="login" class="hidden">
+    <h1>ألبوم الصور</h1>
+    <p class="sub">سجّل الدخول لرفع الصور وإنشاء رموز QR.</p>
+    <form class="card" id="loginForm">
+      <label class="f" for="email">البريد الإلكتروني</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label class="f" for="pass">كلمة المرور</label>
+      <input id="pass" type="password" autocomplete="current-password" required>
+      <div class="row"><button class="btn" type="submit">دخول</button></div>
+      <div id="lmsg" class="msg"></div>
+    </form>
+  </section>
+
+  <!-- ========== لوحة الرفع وإنشاء QR ========== -->
+  <section id="maker" class="hidden">
+    <h1>ألبوم الصور</h1>
+    <p class="sub">ضع صورك ← احصل على QR ← من يمسحه يرى الصور فوراً.</p>
+
+    <div class="card">
+      <label class="f" for="title">اسم الألبوم</label>
+      <input id="title" type="text" placeholder="مثلاً: رحلة العائلة" maxlength="80">
+      <label class="drop" id="drop">
+        <input id="file" type="file" accept="image/*" multiple>
+        <b>اضغط لاختيار الصور</b>
+        <small>أو اسحبها هنا</small>
+      </label>
+      <div id="thumbs" class="grid"></div>
+      <div class="row">
+        <button id="make" class="btn" disabled>إنشاء رمز QR</button>
+        <span id="count" class="msg"></span>
+      </div>
+      <div id="mmsg" class="msg"></div>
+    </div>
+
+    <div id="result" class="card hidden">
+      <h2 id="rtitle"></h2>
+      <div class="qrbox">
+        <canvas id="qr"></canvas>
+        <div>
+          <p>امسح الرمز بكاميرا الجوال ← تظهر الصور مباشرة.</p>
+          <div class="row">
+            <a id="save" class="btn" download="qr.png">تنزيل صورة الرمز</a>
+            <button id="copy" class="btn ghost">نسخ الرابط</button>
+            <a id="open" class="btn ghost" target="_blank" rel="noopener">فتح الألبوم</a>
+          </div>
+          <p id="rlink" class="link" style="margin-top:12px"></p>
+          <div id="rmsg" class="msg"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ألبوماتي</h2>
+      <div id="albums"><p class="msg">جارِ التحميل…</p></div>
+    </div>
+    <button id="logout" class="btn ghost">تسجيل الخروج</button>
+  </section>
+</div>
+
+<!-- العارض بملء الشاشة -->
+<div id="lb" class="lb" role="dialog" aria-modal="true">
+  <button class="x" id="lbx" aria-label="إغلاق">×</button>
+  <img id="lbimg" alt="">
+  <div class="nav">
+    <button id="lbn" aria-label="التالي">‹</button>
+    <span id="lbc"></span>
+    <button id="lbp" aria-label="السابق">›</button>
+  </div>
+</div>
+
+<script>
+{
+// ================= الإعدادات — غيّر هذه فقط =================
+const SUPABASE_URL      = "https://cpbechswwgbcvevypjlx.supabase.co"; // Project URL
+const SUPABASE_ANON_KEY = "sb_publishable_Zs-VlCavmJK4sJBklxd8gA_xKZo_9ya"; // publishable key
+const BUCKET            = "albums";                           // اسم الـ bucket
+
+// ================= ثوابت قابلة للتعديل =================
+const MAX_SIDE       = 1800;   // أقصى بُعد للصورة بعد الضغط (بكسل)
+const JPEG_QUALITY   = 0.85;   // جودة الضغط
+const MAX_PHOTOS     = 50;     // أقصى عدد صور في الألبوم
+const QR_CELL        = 10;     // حجم مربع QR (بكسل)
+const QR_MARGIN      = 4;      // الهامش حول الرمز (مربعات)
+const ID_LENGTH      = 10;     // طول معرّف الألبوم
+const CACHE_SECONDS  = "31536000"; // مدة التخزين المؤقت للصور
+const SUPABASE_JS    = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js";
+const QR_JS          = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
+
+const SITE_URL = location.origin + location.pathname;
+const PUBLIC   = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const show = id => { for (const s of ["loading","viewer","login","maker"]) $(s).classList.toggle("hidden", s !== id); };
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+const newId = () => { const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(ID_LENGTH)); return [...r].map(x => a[x % a.length]).join(""); };
+const albumLink = id => `${SITE_URL}?a=${id}`;
+
+// ================= وضع الزائر: يعرض الصور مباشرة =================
+let gallery = [], gi = 0;
+async function openViewer(id) {
+  show("viewer");
+  try {
+    const r = await fetch(PUBLIC + id + "/meta.json", { cache: "no-cache" });
+    if (!r.ok) throw 0;
+    const m = await r.json();
+    gallery = (m.files || []).map(f => PUBLIC + id + "/" + f);
+    document.title = m.title || "ألبوم الصور";
+    $("vtitle").textContent = m.title || "ألبوم الصور";
+    $("vsub").textContent = `${gallery.length} صورة`;
+    $("gal").innerHTML = gallery.map((u, i) =>
+      `<button data-g="${i}"><img src="${esc(u)}" alt="" ${i > 5 ? 'loading="lazy"' : ""}></button>`).join("");
+  } catch {
+    $("vtitle").textContent = "الألبوم غير موجود";
+    $("vsub").textContent = "ربما حُذف أو الرابط غير صحيح.";
+  }
+}
+function lbShow(i) {
+  gi = (i + gallery.length) % gallery.length;
+  $("lbimg").src = gallery[gi];
+  $("lbc").textContent = `${gi + 1} / ${gallery.length}`;
+  $("lb").classList.add("open");
+}
+$("gal").addEventListener("click", e => { const b = e.target.closest("button"); if (b) lbShow(+b.dataset.g); });
+$("lbx").addEventListener("click", () => $("lb").classList.remove("open"));
+$("lbn").addEventListener("click", () => lbShow(gi + 1));
+$("lbp").addEventListener("click", () => lbShow(gi - 1));
+$("lb").addEventListener("click", e => { if (e.target.id === "lb") $("lb").classList.remove("open"); });
+document.addEventListener("keydown", e => {
+  if (!$("lb").classList.contains("open")) return;
+  if (e.key === "Escape") $("lb").classList.remove("open");
+  if (e.key === "ArrowLeft") lbShow(gi + 1);
+  if (e.key === "ArrowRight") lbShow(gi - 1);
+});
+let tx = 0;
+$("lb").addEventListener("touchstart", e => { tx = e.touches[0].clientX; }, { passive: true });
+$("lb").addEventListener("touchend", e => { const d = e.changedTouches[0].clientX - tx; if (Math.abs(d) > 50) lbShow(gi + (d > 0 ? 1 : -1)); });
+
+// ================= وضع صاحب الصفحة =================
+let sb = null, picked = [], current = null, albumsCache = [];
+
+async function startOwner() {
+  try { await Promise.all([loadScript(SUPABASE_JS), loadScript(QR_JS)]); }
+  catch { $("loading").textContent = "تعذّر تحميل المكتبات. تحقق من الاتصال."; return; }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data } = await sb.auth.getSession();
+  if (data.session) enterMaker(); else show("login");
+}
+
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("lmsg").textContent = "…"; $("lmsg").className = "msg";
+  const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("pass").value });
+  if (error) { $("lmsg").textContent = "البريد أو كلمة المرور غير صحيحة."; $("lmsg").className = "msg err"; return; }
+  enterMaker();
+});
+$("logout").addEventListener("click", async () => { await sb.auth.signOut(); show("login"); });
+
+function enterMaker() { show("maker"); listAlbums(); }
+
+// --- ضغط الصورة قبل الرفع ---
+async function shrink(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const s = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const b = await new Promise(r => c.toBlob(r, "image/jpeg", JPEG_QUALITY));
+    return b ? { blob: b, ext: "jpg", type: "image/jpeg" } : null;
+  } catch { return null; }
+}
+
+// --- اختيار الصور ---
+function addFiles(list) {
+  for (const f of list) {
+    if (!f.type.startsWith("image/") || picked.length >= MAX_PHOTOS) continue;
+    picked.push({ file: f, url: URL.createObjectURL(f) });
+  }
+  renderPicked();
+}
+function renderPicked() {
+  $("thumbs").innerHTML = picked.map((p, i) =>
+    `<div class="th"><img src="${p.url}" alt=""><button data-i="${i}" aria-label="حذف">×</button></div>`).join("");
+  $("count").textContent = picked.length ? `${picked.length} صورة` : "";
+  $("make").disabled = !picked.length;
+}
+$("file").addEventListener("change", e => { addFiles(e.target.files); e.target.value = ""; });
+const drop = $("drop");
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("on"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("on"); }));
+drop.addEventListener("drop", e => addFiles(e.dataTransfer.files));
+$("thumbs").addEventListener("click", e => {
+  const i = e.target.dataset?.i; if (i == null) return;
+  URL.revokeObjectURL(picked[i].url); picked.splice(+i, 1); renderPicked();
+});
+
+// --- إنشاء الألبوم ورفعه ---
+$("make").addEventListener("click", async () => {
+  const btn = $("make"); btn.disabled = true; $("mmsg").textContent = "";
+  const id = newId(), title = $("title").value.trim() || "ألبوم صور", files = [];
+  const store = sb.storage.from(BUCKET);
+  try {
+    for (let i = 0; i < picked.length; i++) {
+      btn.innerHTML = `<span class="spin"></span> رفع ${i + 1} من ${picked.length}`;
+      const f = picked[i].file;
+      const s = await shrink(f) || { blob: f, ext: (f.name.split(".").pop() || "jpg").toLowerCase(), type: f.type };
+      const name = `${String(i + 1).padStart(3, "0")}.${s.ext}`;
+      const { error } = await store.upload(`${id}/${name}`, s.blob, { contentType: s.type, cacheControl: CACHE_SECONDS });
+      if (error) throw error;
+      files.push(name);
+    }
+    btn.textContent = "حفظ…";
+    const meta = new Blob([JSON.stringify({ title, files, created: Date.now() })], { type: "application/json" });
+    const { error } = await store.upload(`${id}/meta.json`, meta, { contentType: "application/json", cacheControl: "60" });
+    if (error) throw error;
+    for (const p of picked) URL.revokeObjectURL(p.url);
+    picked = []; renderPicked(); $("title").value = "";
+    showResult({ id, title });
+    listAlbums();
+  } catch (e) {
+    $("mmsg").className = "msg err";
+    $("mmsg").textContent = "تعذّر الرفع: " + (e?.message || "حاول مرة أخرى");
+  }
+  btn.textContent = "إنشاء رمز QR"; btn.disabled = !picked.length;
+});
+
+// --- رسم QR ---
+function drawQR(text) {
+  const q = qrcode(0, "M"); q.addData(text); q.make();
+  const n = q.getModuleCount(), size = (n + QR_MARGIN * 2) * QR_CELL;
+  const c = $("qr"); c.width = size; c.height = size;
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, size, size); x.fillStyle = "#000";
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++)
+    if (q.isDark(r, k)) x.fillRect((k + QR_MARGIN) * QR_CELL, (r + QR_MARGIN) * QR_CELL, QR_CELL, QR_CELL);
+  return c.toDataURL("image/png");
+}
+function showResult(a) {
+  current = a;
+  const link = albumLink(a.id);
+  $("rtitle").textContent = a.title;
+  $("rlink").textContent = link;
+  $("open").href = link;
+  $("save").href = drawQR(link);
+  $("save").download = `qr-${a.title}.png`;
+  $("rmsg").textContent = "";
+  $("result").classList.remove("hidden");
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(albumLink(current.id)); $("rmsg").textContent = "تم نسخ الرابط."; }
+  catch { $("rmsg").textContent = "انسخ الرابط الظاهر يدوياً."; }
+});
+
+// --- قائمة الألبومات ---
+async function listAlbums() {
+  const { data, error } = await sb.storage.from(BUCKET).list("", { limit: 1000 });
+  if (error) { $("albums").innerHTML = `<p class="msg err">تعذّر جلب القائمة.</p>`; return; }
+  const ids = data.filter(d => !d.id).map(d => d.name); // المجلدات فقط
+  const metas = await Promise.all(ids.map(id =>
+    fetch(PUBLIC + id + "/meta.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null)
+      .then(m => m && { id, ...m })));
+  albumsCache = metas.filter(Boolean).sort((a, b) => (b.created || 0) - (a.created || 0));
+  $("albums").innerHTML = albumsCache.length ? albumsCache.map(a => `
+    <div class="al">
+      <img src="${esc(a.files?.[0] ? PUBLIC + a.id + "/" + a.files[0] : "")}" alt="" loading="lazy">
+      <div class="t"><b>${esc(a.title)}</b><small>${a.files?.length || 0} صورة</small></div>
+      <button data-qr="${esc(a.id)}">QR</button>
+      <button data-del="${esc(a.id)}">حذف</button>
+    </div>`).join("") : `<p class="msg">لا توجد ألبومات بعد.</p>`;
+}
+$("albums").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.qr) { const a = albumsCache.find(x => x.id === b.dataset.qr); if (a) showResult(a); return; }
+  if (b.dataset.del) {
+    if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "متأكد؟"; return; }
+    const id = b.dataset.del, a = albumsCache.find(x => x.id === id);
+    const paths = [...(a?.files || []), "meta.json"].map(f => `${id}/${f}`);
+    const { error } = await sb.storage.from(BUCKET).remove(paths);
+    if (error) { b.textContent = "فشل"; return; }
+    if (current?.id === id) $("result").classList.add("hidden");
+    listAlbums();
+  }
+});
+
+// ================= البدء =================
+const albumId = new URLSearchParams(location.search).get("a");
+if (albumId && /^[a-z0-9]+$/.test(albumId)) openViewer(albumId);
+else startOwner();
+}
+</script>
+</body>
+</html>
