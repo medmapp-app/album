@@ -55,10 +55,10 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
 .gal{display:flex;flex-direction:column;gap:var(--gap,0px)} /* الصور فوق بعض */
 .gal img{width:100%;height:auto;display:block}     /* الصورة بحجمها الكامل بدون قص */
 .vmsg{color:#fff;text-align:center;padding:60px 16px} /* رسالة الخطأ للزائر */
-.opt{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;font-weight:600} /* سطر خيار الشعار */
-.opt input{width:22px;height:22px;accent-color:var(--acc)}  /* مربع الاختيار */
-.logo-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap} /* صف إعداد الشعار */
-.logo-prev{width:64px;height:64px;border-radius:14px;object-fit:contain;background:#fff;border:1px solid var(--line);flex:none} /* معاينة الشعار */
+.choice{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px} /* صف خيارات الشعار */
+.choice label{flex:1 1 140px;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;font-weight:600} /* زر الخيار */
+.choice label:has(input:checked){border-color:var(--acc);box-shadow:0 0 0 2px var(--acc) inset} /* الخيار المحدد */
+.choice input{width:20px;height:20px;accent-color:var(--acc)} /* دائرة الاختيار */
 .hidden{display:none!important}
 .spin{width:20px;height:20px;border:3px solid rgb(255 255 255/.4);border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite} /* مؤشر التحميل */
 @keyframes s{to{transform:rotate(360deg)}}
@@ -105,6 +105,11 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
         <small>أو اسحبها هنا</small>
       </label>
       <div id="thumbs" class="grid"></div>
+      <label class="f">شكل الرمز</label>
+      <div class="choice">
+        <label><input type="radio" name="logoMode" value="1" checked> مع الشعار في المنتصف</label>
+        <label><input type="radio" name="logoMode" value="0"> بدون شعار</label>
+      </div>
       <div class="row">
         <button id="make" class="btn" disabled>إنشاء رمز QR</button>
         <span id="count" class="msg"></span>
@@ -118,7 +123,6 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
         <canvas id="qr"></canvas>
         <div>
           <p>امسح الرمز بكاميرا الجوال ← تظهر الصور مباشرة.</p>
-          <label class="opt"><input type="checkbox" id="withLogo" checked> إضافة الشعار في منتصف الرمز</label>
           <div class="row">
             <a id="save" class="btn" download="qr.png">تنزيل صورة الرمز</a>
             <button id="copy" class="btn ghost">نسخ الرابط</button>
@@ -128,15 +132,6 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
           <div id="rmsg" class="msg"></div>
         </div>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>شعار الرمز</h2>
-      <div class="logo-row">
-        <img id="logoPrev" class="logo-prev" alt="">
-        <label class="btn ghost">تغيير الشعار<input id="logoFile" type="file" accept="image/*" hidden></label>
-      </div>
-      <div id="logoMsg" class="msg"></div>
     </div>
 
     <div class="card">
@@ -154,7 +149,7 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
 const SUPABASE_URL      = "https://cpbechswwgbcvevypjlx.supabase.co"; // Project URL
 const SUPABASE_ANON_KEY = "sb_publishable_Zs-VlCavmJK4sJBklxd8gA_xKZo_9ya"; // publishable key
 const BUCKET            = "albums";                           // اسم الـ bucket
-const LOGO_FILE         = "1795307447485.png";                // الشعار الافتراضي في المستودع
+const LOGO_FILE         = "1795307447485.png";                // اسم ملف الشعار في المستودع — لتغيير الشعار ارفع ملفاً جديداً وضع اسمه هنا
 const PATH_PREFIX       = "ar/data/image-pack/";              // شكل رابط الألبوم بعد عنوان الموقع
 
 // ================= ثوابت قابلة للتعديل =================
@@ -166,11 +161,11 @@ const EAGER_PHOTOS   = 3;      // عدد الصور التي تُحمَّل فو
 const QR_CELL        = 10;     // حجم مربع QR (بكسل)
 const QR_MARGIN      = 4;      // الهامش حول الرمز (مربعات)
 const QR_LEVEL       = "H";    // مستوى تصحيح الأخطاء — H يسمح بوضع شعار في الوسط
-const LOGO_SCALE     = 0.15;   // حجم الشعار نسبةً لعرض الرمز (لا تتجاوز 0.25)
+const LOGO_SCALE     = 0.10;   // حجم الشعار نسبةً لعرض الرمز (لا تتجاوز 0.25)
 const LOGO_PAD       = 0.12;   // الحافة البيضاء حول الشعار (نسبةً لحجمه)
 const LOGO_RADIUS    = 0.22;   // استدارة زوايا الخلفية البيضاء (نسبةً لحجمها)
-const LOGO_MAX_PX    = 512;    // أقصى بُعد للشعار المرفوع (بكسل)
-const SETTINGS_DIR   = "_settings"; // مجلد إعدادات الموقع في Supabase (ليس ألبوماً)
+const TRIM_WHITE     = 240;    // قص الحواف البيضاء حول الشعار: أي لون أفتح من هذا يُعتبر فراغاً
+const SETTINGS_DIR   = "_settings"; // مجلد قديم للإعدادات في Supabase (يُستثنى من قائمة الألبومات)
 const PREF_LOGO_KEY  = "qr-with-logo"; // مفتاح حفظ خيار الشعار في المتصفح
 const ID_LENGTH      = 10;     // طول معرّف الألبوم
 const CACHE_SECONDS  = "31536000"; // مدة التخزين المؤقت للصور
@@ -211,27 +206,36 @@ async function openViewer(id) {
 let sb = null, picked = [], current = null, albumsCache = [];
 let logoImg = null, logoReady = null;
 
-// تحميل الشعار: المرفوع في Supabase إن وُجد، وإلا ملف الشعار في المستودع
+// تحميل الشعار من المستودع، مع قص الحواف البيضاء أو الشفافة حتى يتوسط الرمز تماماً
+function trimLogo(img) {
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let t = c.height, b = -1, l = c.width, r = -1;
+  for (let y = 0; y < c.height; y++) for (let k = 0; k < c.width; k++) {
+    const i = (y * c.width + k) * 4;
+    const filled = d[i + 3] > 16 && (d[i] < TRIM_WHITE || d[i + 1] < TRIM_WHITE || d[i + 2] < TRIM_WHITE);
+    if (filled) { if (y < t) t = y; if (y > b) b = y; if (k < l) l = k; if (k > r) r = k; }
+  }
+  if (b < 0) return c;
+  const o = document.createElement("canvas");
+  o.width = r - l + 1; o.height = b - t + 1;
+  o.getContext("2d").drawImage(c, l, t, o.width, o.height, 0, 0, o.width, o.height);
+  return o;
+}
 function loadLogo(src) {
-  const img = new Image(); img.crossOrigin = "anonymous"; img.src = src;
-  logoImg = img;
-  logoReady = img.decode().then(() => { $("logoPrev").src = src; }).catch(() => { if (logoImg === img) logoImg = null; });
+  const img = new Image(); img.src = src;
+  logoReady = img.decode().then(() => {
+    try { logoImg = trimLogo(img); } catch { logoImg = img; }
+  }).catch(() => { logoImg = null; });
   return logoReady;
 }
-async function findCustomLogo() {
-  const { data } = await sb.storage.from(BUCKET).list(SETTINGS_DIR, { limit: 100 });
-  const files = (data || []).filter(f => f.id && f.name.startsWith("logo-")).map(f => f.name).sort();
-  return files;
-}
-async function initLogo() {
-  const files = await findCustomLogo().catch(() => []);
-  const last = files[files.length - 1];
-  await loadLogo(last ? PUBLIC + SETTINGS_DIR + "/" + last : SITE_URL + LOGO_FILE);
-}
+const withLogo = () => document.querySelector('input[name="logoMode"]:checked')?.value !== "0";
 
 async function startOwner() {
   loadLogo(SITE_URL + LOGO_FILE);
-  try { $("withLogo").checked = localStorage.getItem(PREF_LOGO_KEY) !== "0"; } catch {}
+  try { if (localStorage.getItem(PREF_LOGO_KEY) === "0") document.querySelector('input[name="logoMode"][value="0"]').checked = true; } catch {}
   try { await Promise.all([loadScript(SUPABASE_JS), loadScript(QR_JS)]); }
   catch { $("loading").textContent = "تعذّر تحميل المكتبات. تحقق من الاتصال."; return; }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -248,40 +252,13 @@ $("loginForm").addEventListener("submit", async e => {
 });
 $("logout").addEventListener("click", async () => { await sb.auth.signOut(); show("login"); });
 
-function enterMaker() { show("maker"); listAlbums(); initLogo(); }
+function enterMaker() { show("maker"); listAlbums(); }
 
-// --- خيار الشعار في الرمز ---
-$("withLogo").addEventListener("change", () => {
-  try { localStorage.setItem(PREF_LOGO_KEY, $("withLogo").checked ? "1" : "0"); } catch {}
+// --- خيار الشعار: مع أو بدون، ويُطبَّق فوراً على الرمز المعروض ---
+document.querySelectorAll('input[name="logoMode"]').forEach(r => r.addEventListener("change", () => {
+  try { localStorage.setItem(PREF_LOGO_KEY, withLogo() ? "1" : "0"); } catch {}
   if (current) showResult(current, false);
-});
-
-// --- تغيير الشعار: يُرفع إلى Supabase ويُستخدم في كل الرموز الجديدة ---
-$("logoFile").addEventListener("change", async e => {
-  const f = e.target.files[0]; e.target.value = "";
-  if (!f) return;
-  $("logoMsg").className = "msg"; $("logoMsg").textContent = "جارِ رفع الشعار…";
-  try {
-    const bmp = await createImageBitmap(f);
-    const s = Math.min(1, LOGO_MAX_PX / Math.max(bmp.width, bmp.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-    const blob = await new Promise(r => c.toBlob(r, "image/png"));
-    const old = await findCustomLogo();
-    const name = `logo-${Date.now()}.png`;
-    const store = sb.storage.from(BUCKET);
-    const { error } = await store.upload(`${SETTINGS_DIR}/${name}`, blob, { contentType: "image/png", cacheControl: "60" });
-    if (error) throw error;
-    if (old.length) await store.remove(old.map(n => `${SETTINGS_DIR}/${n}`));
-    await loadLogo(PUBLIC + SETTINGS_DIR + "/" + name);
-    $("logoMsg").textContent = "تم تغيير الشعار ✓";
-    if (current) showResult(current, false);
-  } catch (err) {
-    $("logoMsg").className = "msg err";
-    $("logoMsg").textContent = "تعذّر رفع الشعار: " + (err?.message || "حاول مرة أخرى");
-  }
-});
+}));
 
 // --- ضغط الصورة قبل الرفع ---
 async function shrink(file) {
@@ -361,10 +338,10 @@ async function drawQR(text) {
     if (q.isDark(r, k)) x.fillRect((k + QR_MARGIN) * QR_CELL, (r + QR_MARGIN) * QR_CELL, QR_CELL, QR_CELL);
   // --- الشعار في المنتصف ---
   await logoReady;
-  if ($("withLogo").checked && logoImg && logoImg.naturalWidth) {
+  if (withLogo() && logoImg && logoImg.width) {
     const qrSide = n * QR_CELL;                        // عرض الرمز بدون الهامش
     const lw = qrSide * LOGO_SCALE;
-    const lh = lw * logoImg.naturalHeight / logoImg.naturalWidth;
+    const lh = lw * logoImg.height / logoImg.width;
     const pad = lw * LOGO_PAD, bw = lw + pad * 2, bh = lh + pad * 2;
     const bx = (size - bw) / 2, by = (size - bh) / 2;
     x.fillStyle = "#fff";
