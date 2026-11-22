@@ -47,20 +47,16 @@ input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-of
 .al img{width:54px;height:54px;border-radius:10px;object-fit:cover;flex:none;background:var(--line)}
 .al .t{flex:1}.al .t small{display:block;color:var(--mute)}
 .al button{min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
-.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px} /* معرض الصور للزائر */
-.gal button{padding:0;border:0;aspect-ratio:1;border-radius:12px;overflow:hidden;cursor:zoom-in;background:var(--line)}
-.gal img{width:100%;height:100%;object-fit:cover;display:block}
-.lb{position:fixed;inset:0;background:rgb(0 0 0/.94);display:none;place-items:center;z-index:10} /* العارض بملء الشاشة */
-.lb.open{display:grid}
-.lb img{max-width:96vw;max-height:84vh;border-radius:6px}
-.lb .nav{position:fixed;bottom:18px;inset-inline:0;display:flex;justify-content:center;align-items:center;gap:14px;color:#fff}
-.lb button{min-width:52px;min-height:52px;border-radius:50%;border:0;background:rgb(255 255 255/.16);color:#fff;font-size:24px;cursor:pointer}
-.lb .x{position:fixed;top:14px;inset-inline-end:14px}
+body.view{background:#000}                         /* خلفية صفحة الصور للزائر */
+body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الشاشة بلا هوامش */
+.gal{display:flex;flex-direction:column;gap:var(--gap,0px)} /* الصور فوق بعض */
+.gal img{width:100%;height:auto;display:block}     /* الصورة بحجمها الكامل بدون قص */
+.vmsg{color:#fff;text-align:center;padding:60px 16px} /* رسالة الخطأ للزائر */
 .hidden{display:none!important}
 .spin{width:20px;height:20px;border:3px solid rgb(255 255 255/.4);border-top-color:#fff;border-radius:50%;animation:s .8s linear infinite} /* مؤشر التحميل */
 @keyframes s{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.spin{animation:none}}
-@media(max-width:600px){.qrbox{grid-template-columns:1fr}.qrbox canvas{max-width:270px;margin:0 auto}.gal{grid-template-columns:repeat(2,minmax(0,1fr))}} /* تخطيط الجوال */
+@media(max-width:600px){.qrbox{grid-template-columns:1fr}.qrbox canvas{max-width:270px;margin:0 auto}} /* تخطيط الجوال */
 </style>
 </head>
 <body>
@@ -70,9 +66,8 @@ input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-of
 
   <!-- ========== عرض الألبوم للزائر (بدون تسجيل) ========== -->
   <section id="viewer" class="hidden">
-    <h1 id="vtitle"></h1>
-    <p id="vsub" class="sub"></p>
     <div id="gal" class="gal"></div>
+    <p id="vmsg" class="vmsg hidden"></p>
   </section>
 
   <!-- ========== تسجيل دخول صاحب الصفحة ========== -->
@@ -135,17 +130,6 @@ input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-of
   </section>
 </div>
 
-<!-- العارض بملء الشاشة -->
-<div id="lb" class="lb" role="dialog" aria-modal="true">
-  <button class="x" id="lbx" aria-label="إغلاق">×</button>
-  <img id="lbimg" alt="">
-  <div class="nav">
-    <button id="lbn" aria-label="التالي">‹</button>
-    <span id="lbc"></span>
-    <button id="lbp" aria-label="السابق">›</button>
-  </div>
-</div>
-
 <script>
 {
 // ================= الإعدادات — غيّر هذه فقط =================
@@ -157,6 +141,8 @@ const BUCKET            = "albums";                           // اسم الـ b
 const MAX_SIDE       = 1800;   // أقصى بُعد للصورة بعد الضغط (بكسل)
 const JPEG_QUALITY   = 0.85;   // جودة الضغط
 const MAX_PHOTOS     = 50;     // أقصى عدد صور في الألبوم
+const PHOTO_GAP_PX   = 0;      // المسافة بين الصور عند العرض (بكسل)
+const EAGER_PHOTOS   = 3;      // عدد الصور التي تُحمَّل فوراً، والباقي عند التمرير
 const QR_CELL        = 10;     // حجم مربع QR (بكسل)
 const QR_MARGIN      = 4;      // الهامش حول الرمز (مربعات)
 const ID_LENGTH      = 10;     // طول معرّف الألبوم
@@ -174,45 +160,23 @@ const loadScript = src => new Promise((ok, no) => { const s = document.createEle
 const newId = () => { const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(ID_LENGTH)); return [...r].map(x => a[x % a.length]).join(""); };
 const albumLink = id => `${SITE_URL}?a=${id}`;
 
-// ================= وضع الزائر: يعرض الصور مباشرة =================
-let gallery = [], gi = 0;
+// ================= وضع الزائر: الصور فوق بعض مباشرة =================
 async function openViewer(id) {
+  document.body.classList.add("view");
+  $("gal").style.setProperty("--gap", PHOTO_GAP_PX + "px");
   show("viewer");
   try {
     const r = await fetch(PUBLIC + id + "/meta.json", { cache: "no-cache" });
     if (!r.ok) throw 0;
     const m = await r.json();
-    gallery = (m.files || []).map(f => PUBLIC + id + "/" + f);
-    document.title = m.title || "ألبوم الصور";
-    $("vtitle").textContent = m.title || "ألبوم الصور";
-    $("vsub").textContent = `${gallery.length} صورة`;
-    $("gal").innerHTML = gallery.map((u, i) =>
-      `<button data-g="${i}"><img src="${esc(u)}" alt="" ${i > 5 ? 'loading="lazy"' : ""}></button>`).join("");
+    if (m.title) document.title = m.title;
+    $("gal").innerHTML = (m.files || []).map((f, i) =>
+      `<img src="${esc(PUBLIC + id + "/" + f)}" alt="" ${i >= EAGER_PHOTOS ? 'loading="lazy"' : ""}>`).join("");
   } catch {
-    $("vtitle").textContent = "الألبوم غير موجود";
-    $("vsub").textContent = "ربما حُذف أو الرابط غير صحيح.";
+    $("vmsg").textContent = "الألبوم غير موجود";
+    $("vmsg").classList.remove("hidden");
   }
 }
-function lbShow(i) {
-  gi = (i + gallery.length) % gallery.length;
-  $("lbimg").src = gallery[gi];
-  $("lbc").textContent = `${gi + 1} / ${gallery.length}`;
-  $("lb").classList.add("open");
-}
-$("gal").addEventListener("click", e => { const b = e.target.closest("button"); if (b) lbShow(+b.dataset.g); });
-$("lbx").addEventListener("click", () => $("lb").classList.remove("open"));
-$("lbn").addEventListener("click", () => lbShow(gi + 1));
-$("lbp").addEventListener("click", () => lbShow(gi - 1));
-$("lb").addEventListener("click", e => { if (e.target.id === "lb") $("lb").classList.remove("open"); });
-document.addEventListener("keydown", e => {
-  if (!$("lb").classList.contains("open")) return;
-  if (e.key === "Escape") $("lb").classList.remove("open");
-  if (e.key === "ArrowLeft") lbShow(gi + 1);
-  if (e.key === "ArrowRight") lbShow(gi - 1);
-});
-let tx = 0;
-$("lb").addEventListener("touchstart", e => { tx = e.touches[0].clientX; }, { passive: true });
-$("lb").addEventListener("touchend", e => { const d = e.changedTouches[0].clientX - tx; if (Math.abs(d) > 50) lbShow(gi + (d > 0 ? 1 : -1)); });
 
 // ================= وضع صاحب الصفحة =================
 let sb = null, picked = [], current = null, albumsCache = [];
