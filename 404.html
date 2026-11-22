@@ -263,19 +263,31 @@ document.querySelectorAll('input[name="logoMode"]').forEach(r => r.addEventListe
   if (current) showResult(current, false);
 }));
 
-// --- ضغط الصورة قبل الرفع ---
-async function shrink(file) {
+// --- فتح الصورة: بطريقتين، لأن بعض الجوالات تفشل في الأولى ---
+async function decodeImage(file) {
+  try { return await createImageBitmap(file); } catch {}
+  const url = URL.createObjectURL(file);
   try {
-    const bmp = await createImageBitmap(file);
-    const s = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-    bmp.close();                                      // تحرير ذاكرة الصورة الأصلية
-    const b = await new Promise(r => c.toBlob(r, "image/jpeg", JPEG_QUALITY));
-    c.width = c.height = 0;                           // تحرير ذاكرة اللوحة
-    return b ? { blob: b, ext: "jpg", type: "image/jpeg" } : null;
-  } catch { return null; }
+    const img = new Image(); img.src = url;
+    await img.decode();
+    return img;
+  } finally { setTimeout(() => URL.revokeObjectURL(url), 0); }
+}
+
+// --- ضغط الصورة قبل الرفع؛ تعيد null إن تعذّر فتحها (صيغة غير مدعومة أو صورة في السحابة فقط) ---
+async function shrink(file) {
+  let src;
+  try { src = await decodeImage(file); } catch { return null; }
+  const w = src.width || src.naturalWidth, hgt = src.height || src.naturalHeight;
+  if (!w || !hgt) return null;
+  const s = Math.min(1, MAX_SIDE / Math.max(w, hgt));
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * s); c.height = Math.round(hgt * s);
+  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+  src.close?.();                                    // تحرير ذاكرة الصورة الأصلية
+  const b = await new Promise(r => c.toBlob(r, "image/jpeg", JPEG_QUALITY));
+  c.width = c.height = 0;                           // تحرير ذاكرة اللوحة
+  return b ? { blob: b, ext: "jpg", type: "image/jpeg" } : null;
 }
 
 // --- اختيار الصور ---
@@ -332,35 +344,47 @@ async function uploadFile(path, blob, type, cache) {
 }
 
 // --- إنشاء الألبوم: يرفع صورة صورة، وإن انقطع الاتصال يكمل من حيث توقف ---
-let pending = null;   // { id, title, files } ألبوم لم يكتمل رفعه
+let pending = null;   // { id, title, files, skipped, next } ألبوم لم يكتمل رفعه
 let wakeLock = null;
 $("make").addEventListener("click", async () => {
   const btn = $("make"); btn.disabled = true; $("mmsg").className = "msg"; $("mmsg").textContent = "";
-  if (!pending) pending = { id: newId(), title: $("title").value.trim() || "ألبوم صور", files: [] };
+  if (!pending) pending = { id: newId(), title: $("title").value.trim() || "ألبوم صور", files: [], skipped: [], next: 0 };
   try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}   // إبقاء الشاشة مضاءة أثناء الرفع
   try {
-    for (let i = pending.files.length; i < picked.length; i++) {
+    for (let i = pending.next; i < picked.length; i++) {
       btn.innerHTML = `<span class="spin"></span> رفع ${i + 1} من ${picked.length}`;
-      const f = picked[i].file;
-      const s = await shrink(f) || { blob: f, ext: (f.name.split(".").pop() || "jpg").toLowerCase(), type: f.type };
+      const s = await shrink(picked[i].file);
+      if (!s) { pending.skipped.push(i + 1); pending.next = i + 1; continue; }   // صورة لا يمكن فتحها: تُتخطى
       const name = `${String(i + 1).padStart(3, "0")}.${s.ext}`;
       await uploadFile(`${pending.id}/${name}`, s.blob, s.type, CACHE_SECONDS);
       pending.files.push(name);
+      pending.next = i + 1;
     }
+    if (!pending.files.length) throw Object.assign(new Error("لم يمكن فتح أي صورة"), { noResume: true });
     btn.textContent = "حفظ…";
     const meta = new Blob([JSON.stringify({ title: pending.title, files: pending.files, created: Date.now() })], { type: "application/json" });
     await uploadFile(`${pending.id}/meta.json`, meta, "application/json", "60");
     const done = { id: pending.id, title: pending.title };
+    const skipped = pending.skipped;
     pending = null;
     for (const p of picked) URL.revokeObjectURL(p.url);
     picked = []; renderPicked(); $("title").value = "";
     btn.textContent = "إنشاء رمز QR";
     showResult(done);
     listAlbums();
+    if (skipped.length) {
+      $("mmsg").className = "msg err";
+      $("mmsg").textContent = `تم إنشاء الألبوم، لكن تُخطّيت الصور رقم ${skipped.join("، ")} لأن الجوال لم يستطع فتحها. قد تكون صيغتها غير مدعومة (مثل HEIC) أو موجودة في السحابة فقط وغير منزّلة على الجوال.`;
+    }
   } catch (err) {
     $("mmsg").className = "msg err";
-    $("mmsg").textContent = `توقف الرفع عند الصورة ${pending.files.length + 1} من ${picked.length} (${err?.message || "انقطع الاتصال"}). اضغط «متابعة الرفع» ليكمل من حيث توقف.`;
-    btn.textContent = "متابعة الرفع";
+    if (err?.noResume) {
+      $("mmsg").textContent = "تعذّر فتح الصور المختارة. جرّب صوراً بصيغة JPG أو PNG موجودة على الجوال.";
+      pending = null; btn.textContent = "إنشاء رمز QR";
+    } else {
+      $("mmsg").textContent = `توقف الرفع عند الصورة ${pending.next + 1} من ${picked.length} (${err?.message || "انقطع الاتصال"}). تأكد من الإنترنت ثم اضغط «متابعة الرفع» ليكمل من حيث توقف.`;
+      btn.textContent = "متابعة الرفع";
+    }
   }
   try { await wakeLock?.release(); } catch {}
   btn.disabled = !picked.length;
