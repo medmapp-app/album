@@ -136,6 +136,7 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
 const SUPABASE_URL      = "https://cpbechswwgbcvevypjlx.supabase.co"; // Project URL
 const SUPABASE_ANON_KEY = "sb_publishable_Zs-VlCavmJK4sJBklxd8gA_xKZo_9ya"; // publishable key
 const BUCKET            = "albums";                           // اسم الـ bucket
+const LOGO_SRC          = "1795307447485.png";                // اسم ملف الشعار المرفوع في نفس المستودع
 
 // ================= ثوابت قابلة للتعديل =================
 const MAX_SIDE       = 1800;   // أقصى بُعد للصورة بعد الضغط (بكسل)
@@ -145,6 +146,10 @@ const PHOTO_GAP_PX   = 0;      // المسافة بين الصور عند الع
 const EAGER_PHOTOS   = 3;      // عدد الصور التي تُحمَّل فوراً، والباقي عند التمرير
 const QR_CELL        = 10;     // حجم مربع QR (بكسل)
 const QR_MARGIN      = 4;      // الهامش حول الرمز (مربعات)
+const QR_LEVEL       = "H";    // مستوى تصحيح الأخطاء — H يسمح بوضع شعار في الوسط
+const LOGO_SCALE     = 0.2;    // حجم الشعار نسبةً لعرض الرمز (لا تتجاوز 0.25)
+const LOGO_PAD       = 0.12;   // الحافة البيضاء حول الشعار (نسبةً لحجمه)
+const LOGO_RADIUS    = 0.22;   // استدارة زوايا الخلفية البيضاء (نسبةً لحجمها)
 const ID_LENGTH      = 10;     // طول معرّف الألبوم
 const CACHE_SECONDS  = "31536000"; // مدة التخزين المؤقت للصور
 const SUPABASE_JS    = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js";
@@ -180,8 +185,11 @@ async function openViewer(id) {
 
 // ================= وضع صاحب الصفحة =================
 let sb = null, picked = [], current = null, albumsCache = [];
+let logoImg = null, logoReady = null;
 
 async function startOwner() {
+  logoImg = new Image(); logoImg.src = LOGO_SRC;
+  logoReady = logoImg.decode().catch(() => null);
   try { await Promise.all([loadScript(SUPABASE_JS), loadScript(QR_JS)]); }
   catch { $("loading").textContent = "تعذّر تحميل المكتبات. تحقق من الاتصال."; return; }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -267,24 +275,35 @@ $("make").addEventListener("click", async () => {
   btn.textContent = "إنشاء رمز QR"; btn.disabled = !picked.length;
 });
 
-// --- رسم QR ---
-function drawQR(text) {
-  const q = qrcode(0, "M"); q.addData(text); q.make();
+// --- رسم QR مع الشعار في المنتصف ---
+async function drawQR(text) {
+  const q = qrcode(0, QR_LEVEL); q.addData(text); q.make();
   const n = q.getModuleCount(), size = (n + QR_MARGIN * 2) * QR_CELL;
   const c = $("qr"); c.width = size; c.height = size;
   const x = c.getContext("2d");
   x.fillStyle = "#fff"; x.fillRect(0, 0, size, size); x.fillStyle = "#000";
   for (let r = 0; r < n; r++) for (let k = 0; k < n; k++)
     if (q.isDark(r, k)) x.fillRect((k + QR_MARGIN) * QR_CELL, (r + QR_MARGIN) * QR_CELL, QR_CELL, QR_CELL);
+  await logoReady;
+  if (logoImg && logoImg.naturalWidth) {
+    const qrSide = n * QR_CELL;                        // عرض الرمز بدون الهامش
+    const lw = qrSide * LOGO_SCALE;
+    const lh = lw * logoImg.naturalHeight / logoImg.naturalWidth;
+    const pad = lw * LOGO_PAD, bw = lw + pad * 2, bh = lh + pad * 2;
+    const bx = (size - bw) / 2, by = (size - bh) / 2;
+    x.fillStyle = "#fff";
+    x.beginPath(); x.roundRect(bx, by, bw, bh, Math.min(bw, bh) * LOGO_RADIUS); x.fill();
+    x.drawImage(logoImg, (size - lw) / 2, (size - lh) / 2, lw, lh);
+  }
   return c.toDataURL("image/png");
 }
-function showResult(a) {
+async function showResult(a) {
   current = a;
   const link = albumLink(a.id);
   $("rtitle").textContent = a.title;
   $("rlink").textContent = link;
   $("open").href = link;
-  $("save").href = drawQR(link);
+  $("save").href = await drawQR(link);
   $("save").download = `qr-${a.title}.png`;
   $("rmsg").textContent = "";
   $("result").classList.remove("hidden");
