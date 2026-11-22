@@ -153,9 +153,12 @@ const LOGO_FILE         = "1795376222089.jpg";                // اسم ملف �
 const PATH_PREFIX       = "ar/data/image-pack/";              // شكل رابط الألبوم بعد عنوان الموقع
 
 // ================= ثوابت قابلة للتعديل =================
-const MAX_SIDE       = 1800;   // أقصى بُعد للصورة بعد الضغط (بكسل)
+const MAX_SIDE       = 1600;   // أقصى بُعد للصورة بعد الضغط (بكسل)
 const JPEG_QUALITY   = 0.85;   // جودة الضغط
-const MAX_PHOTOS     = 50;     // أقصى عدد صور في الألبوم
+const MAX_PHOTOS     = 200;    // أقصى عدد صور في الألبوم الواحد
+const UPLOAD_RETRIES = 4;      // عدد محاولات رفع كل صورة قبل التوقف
+const UPLOAD_TIMEOUT_MS = 60000; // أقصى وقت لرفع صورة واحدة قبل إعادة المحاولة (مللي ثانية)
+const RETRY_DELAY_MS = 2000;   // الانتظار بين المحاولات، يزيد مع كل محاولة (مللي ثانية)
 const PHOTO_GAP_PX   = 0;      // المسافة بين الصور عند العرض (بكسل)
 const EAGER_PHOTOS   = 3;      // عدد الصور التي تُحمَّل فوراً، والباقي عند التمرير
 const QR_CELL        = 10;     // حجم مربع QR (بكسل)
@@ -268,13 +271,16 @@ async function shrink(file) {
     const c = document.createElement("canvas");
     c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
     c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close();                                      // تحرير ذاكرة الصورة الأصلية
     const b = await new Promise(r => c.toBlob(r, "image/jpeg", JPEG_QUALITY));
+    c.width = c.height = 0;                           // تحرير ذاكرة اللوحة
     return b ? { blob: b, ext: "jpg", type: "image/jpeg" } : null;
   } catch { return null; }
 }
 
 // --- اختيار الصور ---
 function addFiles(list) {
+  if (pending) { $("mmsg").textContent = "أكمل رفع الألبوم الحالي أولاً."; return; }
   for (const f of list) {
     if (!f.type.startsWith("image/") || picked.length >= MAX_PHOTOS) continue;
     picked.push({ file: f, url: URL.createObjectURL(f) });
@@ -293,38 +299,71 @@ const drop = $("drop");
 ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("on"); }));
 drop.addEventListener("drop", e => addFiles(e.dataTransfer.files));
 $("thumbs").addEventListener("click", e => {
-  const i = e.target.dataset?.i; if (i == null) return;
+  const i = e.target.dataset?.i; if (i == null || pending) return;
   URL.revokeObjectURL(picked[i].url); picked.splice(+i, 1); renderPicked();
 });
 
-// --- إنشاء الألبوم ورفعه ---
+// --- رفع ملف واحد مع مهلة زمنية وإعادة محاولة تلقائية ---
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function uploadFile(path, blob, type, cache) {
+  for (let attempt = 1; attempt <= UPLOAD_RETRIES; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), UPLOAD_TIMEOUT_MS);
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) throw Object.assign(new Error("انتهت الجلسة، سجّل الدخول مرة أخرى"), { fatal: true });
+      const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.access_token}`,
+                   "Content-Type": type || "application/octet-stream", "cache-control": `max-age=${cache}` },
+        body: blob, signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if (r.ok) return;
+      const txt = await r.text();
+      if (r.status === 409 || /exists|duplicate/i.test(txt)) return;   // رُفع في محاولة سابقة
+      throw new Error(txt.slice(0, 120) || "HTTP " + r.status);
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.fatal || attempt === UPLOAD_RETRIES) throw err;
+      await wait(RETRY_DELAY_MS * attempt);
+    }
+  }
+}
+
+// --- إنشاء الألبوم: يرفع صورة صورة، وإن انقطع الاتصال يكمل من حيث توقف ---
+let pending = null;   // { id, title, files } ألبوم لم يكتمل رفعه
+let wakeLock = null;
 $("make").addEventListener("click", async () => {
-  const btn = $("make"); btn.disabled = true; $("mmsg").textContent = "";
-  const id = newId(), title = $("title").value.trim() || "ألبوم صور", files = [];
-  const store = sb.storage.from(BUCKET);
+  const btn = $("make"); btn.disabled = true; $("mmsg").className = "msg"; $("mmsg").textContent = "";
+  if (!pending) pending = { id: newId(), title: $("title").value.trim() || "ألبوم صور", files: [] };
+  try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {}   // إبقاء الشاشة مضاءة أثناء الرفع
   try {
-    for (let i = 0; i < picked.length; i++) {
+    for (let i = pending.files.length; i < picked.length; i++) {
       btn.innerHTML = `<span class="spin"></span> رفع ${i + 1} من ${picked.length}`;
       const f = picked[i].file;
       const s = await shrink(f) || { blob: f, ext: (f.name.split(".").pop() || "jpg").toLowerCase(), type: f.type };
       const name = `${String(i + 1).padStart(3, "0")}.${s.ext}`;
-      const { error } = await store.upload(`${id}/${name}`, s.blob, { contentType: s.type, cacheControl: CACHE_SECONDS });
-      if (error) throw error;
-      files.push(name);
+      await uploadFile(`${pending.id}/${name}`, s.blob, s.type, CACHE_SECONDS);
+      pending.files.push(name);
     }
     btn.textContent = "حفظ…";
-    const meta = new Blob([JSON.stringify({ title, files, created: Date.now() })], { type: "application/json" });
-    const { error } = await store.upload(`${id}/meta.json`, meta, { contentType: "application/json", cacheControl: "60" });
-    if (error) throw error;
+    const meta = new Blob([JSON.stringify({ title: pending.title, files: pending.files, created: Date.now() })], { type: "application/json" });
+    await uploadFile(`${pending.id}/meta.json`, meta, "application/json", "60");
+    const done = { id: pending.id, title: pending.title };
+    pending = null;
     for (const p of picked) URL.revokeObjectURL(p.url);
     picked = []; renderPicked(); $("title").value = "";
-    showResult({ id, title });
+    btn.textContent = "إنشاء رمز QR";
+    showResult(done);
     listAlbums();
-  } catch (e) {
+  } catch (err) {
     $("mmsg").className = "msg err";
-    $("mmsg").textContent = "تعذّر الرفع: " + (e?.message || "حاول مرة أخرى");
+    $("mmsg").textContent = `توقف الرفع عند الصورة ${pending.files.length + 1} من ${picked.length} (${err?.message || "انقطع الاتصال"}). اضغط «متابعة الرفع» ليكمل من حيث توقف.`;
+    btn.textContent = "متابعة الرفع";
   }
-  btn.textContent = "إنشاء رمز QR"; btn.disabled = !picked.length;
+  try { await wakeLock?.release(); } catch {}
+  btn.disabled = !picked.length;
 });
 
 // --- رسم QR ---
