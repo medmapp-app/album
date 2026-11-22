@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ألبوم الصور</title>
+<title>صالحة - Image QR Code</title>
+<meta property="og:title" content="صالحة - Image QR Code">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
@@ -174,7 +175,6 @@ async function openViewer(id) {
     const r = await fetch(PUBLIC + id + "/meta.json", { cache: "no-cache" });
     if (!r.ok) throw 0;
     const m = await r.json();
-    if (m.title) document.title = m.title;
     $("gal").innerHTML = (m.files || []).map((f, i) =>
       `<img src="${esc(PUBLIC + id + "/" + f)}" alt="" ${i >= EAGER_PHOTOS ? 'loading="lazy"' : ""}>`).join("");
   } catch {
