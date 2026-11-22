@@ -55,6 +55,8 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
 .gal{display:flex;flex-direction:column;gap:var(--gap,0px)} /* الصور فوق بعض */
 .gal img{width:100%;height:auto;display:block}     /* الصورة بحجمها الكامل بدون قص */
 .vmsg{color:#fff;text-align:center;padding:60px 16px} /* رسالة الخطأ للزائر */
+.splash{position:fixed;inset:0;z-index:50;background:#000 center/contain no-repeat;transition:opacity var(--fade,300ms) ease} /* صورة البداية بملء الشاشة — غيّر contain إلى cover لتملأ الشاشة مع قص الأطراف */
+.splash.out{opacity:0;pointer-events:none}         /* اختفاء صورة البداية تدريجياً */
 .choice{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px} /* صف خيارات الشعار */
 .choice label{flex:1 1 140px;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;font-weight:600} /* زر الخيار */
 .choice label:has(input:checked){border-color:var(--acc);box-shadow:0 0 0 2px var(--acc) inset} /* الخيار المحدد */
@@ -151,6 +153,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Zs-VlCavmJK4sJBklxd8gA_xKZo_9ya"; // p
 const BUCKET            = "albums";                           // اسم الـ bucket
 const LOGO_FILE         = "1795376222089.jpg";                // اسم ملف الشعار في المستودع — لتغيير الشعار ارفع ملفاً جديداً وضع اسمه هنا
 const PATH_PREFIX       = "ar/data/image-pack/";              // شكل رابط الألبوم بعد عنوان الموقع
+const SPLASH_FILE       = "file_0003da38.png";                // صورة البداية التي تظهر قبل صور الألبوم — اتركها "" لإلغائها
 
 // ================= ثوابت قابلة للتعديل =================
 const MAX_SIDE       = 4096;   // أقصى بُعد للصورة بعد الضغط (بكسل) — 4096 حد آمن للوحة الرسم في متصفحات الجوال
@@ -159,6 +162,9 @@ const MAX_PHOTOS     = 200;    // أقصى عدد صور في الألبوم ا�
 const UPLOAD_RETRIES = 4;      // عدد محاولات رفع كل صورة قبل التوقف
 const UPLOAD_TIMEOUT_MS = 60000; // أقصى وقت لرفع صورة واحدة قبل إعادة المحاولة (مللي ثانية)
 const RETRY_DELAY_MS = 2000;   // الانتظار بين المحاولات، يزيد مع كل محاولة (مللي ثانية)
+const SPLASH_MS      = 500;    // مدة ظهور صورة البداية (مللي ثانية) — 500 = نصف ثانية
+const SPLASH_FADE_MS = 300;    // مدة اختفاء صورة البداية التدريجي (مللي ثانية)
+const SPLASH_MAX_WAIT_MS = 2500; // إن تأخر تحميل صورة البداية أكثر من هذا تُتخطى (مللي ثانية)
 const PHOTO_GAP_PX   = 0;      // المسافة بين الصور عند العرض (بكسل)
 const EAGER_PHOTOS   = 3;      // عدد الصور التي تُحمَّل فوراً، والباقي عند التمرير
 const QR_CELL        = 10;     // حجم مربع QR (بكسل)
@@ -188,9 +194,35 @@ const loadScript = src => new Promise((ok, no) => { const s = document.createEle
 const newId = () => { const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(ID_LENGTH)); return [...r].map(x => a[x % a.length]).join(""); };
 const albumLink = id => SITE_URL + PATH_PREFIX + id;
 
+// ================= صورة البداية: تظهر لحظة ثم تختفي، والألبوم يتحمّل خلفها =================
+function showSplash() {
+  if (!SPLASH_FILE) return;
+  const el = document.createElement("div");
+  el.className = "splash";
+  el.style.setProperty("--fade", SPLASH_FADE_MS + "ms");
+  document.body.appendChild(el);
+  let done = false;
+  const hide = () => {
+    if (done) return; done = true;
+    el.classList.add("out");
+    setTimeout(() => el.remove(), SPLASH_FADE_MS);
+  };
+  const giveUp = setTimeout(hide, SPLASH_MAX_WAIT_MS);  // لا نُبقي الزائر ينتظر إن كانت الشبكة بطيئة
+  const img = new Image();
+  img.onload = () => {
+    if (done) return;
+    clearTimeout(giveUp);
+    el.style.backgroundImage = `url("${img.src}")`;
+    setTimeout(hide, SPLASH_MS);                        // يبدأ العد بعد ظهور الصورة فعلاً
+  };
+  img.onerror = () => { clearTimeout(giveUp); hide(); };
+  img.src = SITE_URL + SPLASH_FILE;
+}
+
 // ================= وضع الزائر: الصور فوق بعض مباشرة =================
 async function openViewer(id) {
   document.body.classList.add("view");
+  showSplash();
   $("gal").style.setProperty("--gap", PHOTO_GAP_PX + "px");
   show("viewer");
   try {
