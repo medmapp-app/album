@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-  <meta name="robots" content="noindex, nofollow, noimageindex">
+<meta name="robots" content="noindex, nofollow, noimageindex">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>صالحة - Image QR Code</title>
 <meta property="og:title" content="صالحة - Image QR Code">
@@ -138,7 +138,8 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
 const SUPABASE_URL      = "https://cpbechswwgbcvevypjlx.supabase.co"; // Project URL
 const SUPABASE_ANON_KEY = "sb_publishable_Zs-VlCavmJK4sJBklxd8gA_xKZo_9ya"; // publishable key
 const BUCKET            = "albums";                           // اسم الـ bucket
-const LOGO_SRC          = "1795307447485.png";                // اسم ملف الشعار المرفوع في نفس المستودع
+const LOGO_FILE         = "1795307447485.png";                // اسم ملف الشعار المرفوع في نفس المستودع
+const PATH_PREFIX       = "ar/data/image-pack/";              // شكل رابط الألبوم بعد عنوان الموقع
 
 // ================= ثوابت قابلة للتعديل =================
 const MAX_SIDE       = 1800;   // أقصى بُعد للصورة بعد الضغط (بكسل)
@@ -157,7 +158,10 @@ const CACHE_SECONDS  = "31536000"; // مدة التخزين المؤقت للص�
 const SUPABASE_JS    = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js";
 const QR_JS          = "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js";
 
-const SITE_URL = location.origin + location.pathname;
+// عنوان الموقع الأساسي، يُحسب تلقائياً من الرابط الحالي
+const pathNow  = location.pathname;
+const cut      = pathNow.indexOf("/" + PATH_PREFIX);
+const SITE_URL = location.origin + (cut >= 0 ? pathNow.slice(0, cut + 1) : pathNow.replace(/[^/]*$/, ""));
 const PUBLIC   = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
 
 const $ = id => document.getElementById(id);
@@ -165,7 +169,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const show = id => { for (const s of ["loading","viewer","login","maker"]) $(s).classList.toggle("hidden", s !== id); };
 const loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
 const newId = () => { const a = "abcdefghijkmnpqrstuvwxyz23456789", r = crypto.getRandomValues(new Uint8Array(ID_LENGTH)); return [...r].map(x => a[x % a.length]).join(""); };
-const albumLink = id => `${SITE_URL}?a=${id}`;
+const albumLink = id => SITE_URL + PATH_PREFIX + id;
 
 // ================= وضع الزائر: الصور فوق بعض مباشرة =================
 async function openViewer(id) {
@@ -189,7 +193,7 @@ let sb = null, picked = [], current = null, albumsCache = [];
 let logoImg = null, logoReady = null;
 
 async function startOwner() {
-  logoImg = new Image(); logoImg.src = LOGO_SRC;
+  logoImg = new Image(); logoImg.src = SITE_URL + LOGO_FILE;
   logoReady = logoImg.decode().catch(() => null);
   try { await Promise.all([loadScript(SUPABASE_JS), loadScript(QR_JS)]); }
   catch { $("loading").textContent = "تعذّر تحميل المكتبات. تحقق من الاتصال."; return; }
@@ -347,7 +351,9 @@ $("albums").addEventListener("click", async e => {
 });
 
 // ================= البدء =================
-const albumId = new URLSearchParams(location.search).get("a");
+// يقبل الشكل الجديد (.../image-pack/ID) والقديم (?a=ID)
+const pathId  = (pathNow.match(/\/image-pack\/([a-z0-9]+)\/?$/) || [])[1];
+const albumId = pathId || new URLSearchParams(location.search).get("a");
 if (albumId && /^[a-z0-9]+$/.test(albumId)) openViewer(albumId);
 else startOwner();
 }
