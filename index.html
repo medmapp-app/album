@@ -8,7 +8,10 @@
 <title>صالحة - Image QR Code</title>
 <meta property="og:title" content="صالحة - Image QR Code">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- الخط يُحمَّل في الخلفية: الصفحة تظهر فوراً بخط الجوال ثم يتحول إلى Readex Pro عند وصوله -->
+<link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;600;700&display=swap" rel="stylesheet"></noscript>
 <style>
 :root{color-scheme:light dark;
   --bg:light-dark(#f7f2ea,#17140f);      /* لون الخلفية */
@@ -55,7 +58,7 @@ body.view .wrap{max-width:900px;padding:0}         /* الصور بعرض الش
 .gal{display:flex;flex-direction:column;gap:var(--gap,0px)} /* الصور فوق بعض */
 .gal img{width:100%;height:auto;display:block}     /* الصورة بحجمها الكامل بدون قص */
 .vmsg{color:#fff;text-align:center;padding:60px 16px} /* رسالة الخطأ للزائر */
-.splash{position:fixed;inset:0;z-index:50;background:#000 center/cover no-repeat;transition:opacity var(--fade,300ms) ease} /* صورة البداية تملأ كامل الشاشة أياً كان مقاسها — cover يقص الأطراف الزائدة بدل ترك فراغ أسود */
+.splash{position:fixed;inset:0;z-index:50;background:#fefefe center/cover no-repeat;transition:opacity var(--fade,300ms) ease} /* صورة البداية تملأ كامل الشاشة أياً كان مقاسها — الخلفية بلون أطراف الصورة حتى لا يظهر وميض أسود قبل تحميلها */
 .splash.out{opacity:0;pointer-events:none}         /* اختفاء صورة البداية تدريجياً */
 .choice{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px} /* صف خيارات الشعار */
 .choice label{flex:1 1 140px;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;font-weight:600} /* زر الخيار */
@@ -153,7 +156,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Zs-VlCavmJK4sJBklxd8gA_xKZo_9ya"; // p
 const BUCKET            = "albums";                           // اسم الـ bucket
 const LOGO_FILE         = "1795376222089.jpg";                // اسم ملف الشعار في المستودع — لتغيير الشعار ارفع ملفاً جديداً وضع اسمه هنا
 const PATH_PREFIX       = "ar/data/image-pack/";              // شكل رابط الألبوم بعد عنوان الموقع
-const SPLASH_FILE       = "file_0003da38.png";                // صورة البداية التي تظهر قبل صور الألبوم — اتركها "" لإلغائها
+const SPLASH_FILE       = "splash.jpg";                       // صورة البداية التي تظهر قبل صور الألبوم — اتركها "" لإلغائها
 
 // ================= ثوابت قابلة للتعديل =================
 const MAX_SIDE       = 4096;   // أقصى بُعد للصورة بعد الضغط (بكسل) — 4096 حد آمن للوحة الرسم في متصفحات الجوال
@@ -166,7 +169,7 @@ const SPLASH_MS      = 500;    // مدة ظهور صورة البداية (مل�
 const SPLASH_FADE_MS = 300;    // مدة اختفاء صورة البداية التدريجي (مللي ثانية)
 const SPLASH_MAX_WAIT_MS = 2500; // إن تأخر تحميل صورة البداية أكثر من هذا تُتخطى (مللي ثانية)
 const PHOTO_GAP_PX   = 0;      // المسافة بين الصور عند العرض (بكسل)
-const EAGER_PHOTOS   = 3;      // عدد الصور التي تُحمَّل فوراً، والباقي عند التمرير
+const EAGER_PHOTOS   = 1;      // عدد الصور التي تُحمَّل فوراً، والباقي عند التمرير — 1 أسرع على الإنترنت البطيء
 const QR_CELL        = 10;     // حجم مربع QR (بكسل)
 const QR_MARGIN      = 4;      // الهامش حول الرمز (مربعات)
 const QR_LEVEL       = "H";    // مستوى تصحيح الأخطاء — H يسمح بوضع شعار في الوسط
@@ -230,7 +233,7 @@ async function openViewer(id) {
     if (!r.ok) throw 0;
     const m = await r.json();
     $("gal").innerHTML = (m.files || []).map((f, i) =>
-      `<img src="${esc(PUBLIC + id + "/" + f)}" alt="" ${i >= EAGER_PHOTOS ? 'loading="lazy"' : ""}>`).join("");
+      `<img src="${esc(PUBLIC + id + "/" + f)}" alt="" decoding="async" ${i >= EAGER_PHOTOS ? 'loading="lazy"' : 'fetchpriority="high"'}>`).join("");
   } catch {
     $("vmsg").textContent = "الألبوم غير موجود";
     $("vmsg").classList.remove("hidden");
