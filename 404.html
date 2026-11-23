@@ -178,6 +178,7 @@ const LOGO_PAD       = 0.12;   // الحافة البيضاء حول الشعا�
 const LOGO_RADIUS    = 0.22;   // استدارة زوايا الخلفية البيضاء (نسبةً لحجمها)
 const TRIM_WHITE     = 240;    // قص الحواف البيضاء حول الشعار: أي لون أفتح من هذا يُعتبر فراغاً
 const SETTINGS_DIR   = "_settings"; // مجلد قديم للإعدادات في Supabase (يُستثنى من قائمة الألبومات)
+const ORPHAN_MAX_AGE_HOURS = 2; // مجلد رفعٍ لم يكتمل (بلا meta.json) يُحذف تلقائياً إذا مرّ على آخر صورة فيه أكثر من هذا (ساعات)
 const PREF_LOGO_KEY  = "qr-with-logo"; // مفتاح حفظ خيار الشعار في المتصفح
 const ID_LENGTH      = 10;     // طول معرّف الألبوم
 const CACHE_SECONDS  = "31536000"; // مدة التخزين المؤقت للصور
@@ -465,6 +466,31 @@ $("copy").addEventListener("click", async () => {
   catch { $("rmsg").textContent = "انسخ الرابط الظاهر يدوياً."; }
 });
 
+// --- ملفات مجلد ألبوم كما هي فعلاً في التخزين ---
+async function folderFiles(id) {
+  const { data, error } = await sb.storage.from(BUCKET).list(id, { limit: 1000 });
+  if (error) throw error;
+  return data.filter(f => f.id);                    // الملفات فقط
+}
+// --- حذف مجلد ألبوم بكل ما فيه، حتى لا يبقى مجلد فارغ أو صور متروكة ---
+async function removeFolder(id) {
+  const files = await folderFiles(id);
+  if (!files.length) return;
+  const { error } = await sb.storage.from(BUCKET).remove(files.map(f => `${id}/${f.name}`));
+  if (error) throw error;
+}
+// --- تنظيف رفعٍ لم يكتمل: مجلد بلا meta.json ومرّ عليه وقت كافٍ ---
+async function cleanOrphan(id) {
+  if (pending?.id === id) return;                   // رفع جارٍ الآن في هذه الصفحة
+  try {
+    const files = await folderFiles(id);
+    if (files.some(f => f.name === "meta.json")) return;   // ألبوم مكتمل، تعذّر جلبه مؤقتاً فقط
+    const newest = Math.max(0, ...files.map(f => Date.parse(f.updated_at || f.created_at) || 0));
+    if (Date.now() - newest < ORPHAN_MAX_AGE_HOURS * 3600000) return; // قد يكون رفعاً جارياً من جهاز آخر
+    await removeFolder(id);
+  } catch {}
+}
+
 // --- قائمة الألبومات ---
 async function listAlbums() {
   const { data, error } = await sb.storage.from(BUCKET).list("", { limit: 1000 });
@@ -473,6 +499,7 @@ async function listAlbums() {
   const metas = await Promise.all(ids.map(id =>
     fetch(PUBLIC + id + "/meta.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).catch(() => null)
       .then(m => m && { id, ...m })));
+  ids.forEach((id, i) => { if (!metas[i]) cleanOrphan(id); }); // تنظيف في الخلفية دون تأخير القائمة
   albumsCache = metas.filter(Boolean).sort((a, b) => (b.created || 0) - (a.created || 0));
   $("albums").innerHTML = albumsCache.length ? albumsCache.map(a => `
     <div class="al">
@@ -487,10 +514,9 @@ $("albums").addEventListener("click", async e => {
   if (b.dataset.qr) { const a = albumsCache.find(x => x.id === b.dataset.qr); if (a) showResult(a); return; }
   if (b.dataset.del) {
     if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "متأكد؟"; return; }
-    const id = b.dataset.del, a = albumsCache.find(x => x.id === id);
-    const paths = [...(a?.files || []), "meta.json"].map(f => `${id}/${f}`);
-    const { error } = await sb.storage.from(BUCKET).remove(paths);
-    if (error) { b.textContent = "فشل"; return; }
+    const id = b.dataset.del;
+    try { await removeFolder(id); }                 // يحذف كل ملفات المجلد فلا يبقى منه شيء
+    catch { b.textContent = "فشل"; return; }
     if (current?.id === id) $("result").classList.add("hidden");
     listAlbums();
   }
